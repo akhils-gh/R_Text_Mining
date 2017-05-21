@@ -1,0 +1,178 @@
+---
+title: "02_Sentiment Analysis"
+author: "Akhil"
+date: "17 May 2017"
+output: html_document
+---
+
+## Sentiment Analysis
+
+```{r}
+library(tidyverse)
+library(tidytext)
+
+data("sentiments")
+sentiments
+
+```
+
+tidytext package contains three lexicons -
+1. AFINN - rating b/w +5 to -5
+2. bing - positive/negative classification
+3. nrc - classification into anger/trust/fear etc
+
+```{r}
+get_sentiments("afinn")
+
+```
+
+```{r}
+get_sentiments("bing")
+
+```
+
+```{r}
+get_sentiments("nrc")
+
+```
+
+```{r}
+library(janeaustenr)
+library(stringr)
+tidy_books = austen_books() %>% 
+        group_by(book) %>% 
+        mutate(linenumber = row_number(),
+               chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]", ignore_case = T)))) %>% 
+        ungroup() %>% 
+        unnest_tokens(output = word, input = text)
+
+tidy_books
+
+```
+
+```{r}
+nrc_joy = get_sentiments("nrc") %>% 
+        filter(sentiment == "joy")
+
+tidy_books %>% 
+        filter(book == "Emma") %>% 
+        inner_join(y = nrc_joy,by = "word") %>% 
+        count(word, sort = T)
+
+```
+
+
+## Calculating sentiment score
+
+```{r}
+ja_sentiment = tidy_books %>% 
+        inner_join(get_sentiments("bing")) %>% 
+        count(book, index = linenumber%/%80, sentiment) %>% 
+        spread(key = sentiment, value = n, fill = 0) %>% 
+        mutate(sentiment = positive - negative)
+
+ja_sentiment
+
+```
+
+
+## Comparing sentiments across books
+
+```{r}
+library(ggplot2)
+
+ja_sentiment %>% ggplot(aes(x = index, y = sentiment, fill = book)) +
+        geom_bar(stat = "identity") +
+        facet_wrap(~book, scales = "free_x", ncol = 2) +
+        theme_minimal() +
+        theme(legend.position = "None", axis.title.x = element_blank())
+
+```
+
+
+## Comparing sentiment Lexicons
+
+```{r}
+pp = tidy_books %>% 
+        filter(book == "Pride & Prejudice")
+
+pp
+
+```
+
+
+### AFINN Lexicon
+
+```{r}
+
+afinn_sentiment = pp %>% 
+        inner_join(y = get_sentiments("afinn"), by = "word") %>%
+        group_by(index = linenumber %/% 80) %>% 
+        summarise(score = sum(score)) %>% 
+        mutate(method = "AFINN")
+        
+afinn_sentiment
+```
+
+### Bing Lexicon
+
+```{r}
+
+bing_sentiment = pp %>% 
+        inner_join(get_sentiments("bing"), by = "word") %>% 
+        count(index = linenumber %/% 80, sentiment) %>% 
+        spread(key = sentiment, value = n, fill = 0) %>% 
+        mutate(score = positive - negative, method = "bing")
+
+bing_sentiment
+```
+
+
+### NRC Lexicon
+
+```{r}
+
+nrc_sentiment = pp %>% 
+        inner_join(get_sentiments("nrc"), by = "word") %>%
+        filter(sentiment %in% c("positive", "negative")) %>% 
+        count(index = linenumber %/% 80, sentiment) %>% 
+        spread(key = sentiment, value = n) %>% 
+        mutate(score = positive - negative, method = "nrc")
+
+nrc_sentiment
+
+```
+
+### Visualizing Sentiments against lexicons 
+
+```{r}
+pp_sentiment = bind_rows(afinn_sentiment, bing_sentiment[c("index", "score", "method")], nrc_sentiment[c("index", "score", "method")])
+
+pp_sentiment %>% ggplot(aes(x = index, y = score, fill = method)) +
+        geom_col() +
+        facet_wrap(~method, ncol = 1) +
+        theme_minimal() +
+        theme(legend.position = "none", axis.title.x = element_blank())
+```
+
+
+## Looking beyond standalone words
+A sentence with words "not great" may get a positive sentiment score because of word "great". For a better sentiment analysis, toeknization can be done on a sentence level. Packages that can come in handy are -
+1. CoreNLP
+2. CleanNLP
+3. sentimentr
+
+
+```{r}
+pp_sentences = data_frame(text = prideprejudice) %>% 
+        unnest_tokens(output = sentence, input = text, token = "sentences")
+
+pp_sentences
+```
+
+```{r}
+
+
+
+```
+
